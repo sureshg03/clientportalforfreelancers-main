@@ -86,11 +86,20 @@ export function FreelancerDashboard() {
   const loadDashboardData = async () => {
     if (!profile) return;
     try {
+      setLoading(true);
+      
+      // Safety timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.log('FreelancerDashboard: Safety timeout triggered after 3 seconds');
+        setLoading(false);
+      }, 3000);
+
       const [statsData, projectsData] = await Promise.all([
         getDashboardStats(profile.id, 'freelancer'),
         getProjectsForFreelancer(profile.id),
       ]);
 
+      clearTimeout(timeoutId);
       setStats({
         totalEarnings: statsData.totalEarnings || 0,
         activeProjects: statsData.activeProjects || 0,

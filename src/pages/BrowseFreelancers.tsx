@@ -55,7 +55,17 @@ export function BrowseFreelancers() {
 
   const loadFreelancers = async () => {
     try {
+      setLoading(true);
+      
+      // Safety timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.log('BrowseFreelancers: Safety timeout triggered after 3 seconds');
+        setLoading(false);
+      }, 3000);
+
       const data = await getFreelancers(100); // Get up to 100 freelancers
+      
+      clearTimeout(timeoutId);
       setFreelancers(data);
       setFilteredFreelancers(data);
     } catch (error) {

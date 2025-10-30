@@ -56,11 +56,20 @@ export function ClientDashboard() {
     if (!profile) return;
 
     try {
+      setLoading(true);
+      
+      // Safety timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.log('ClientDashboard: Safety timeout triggered after 3 seconds');
+        setLoading(false);
+      }, 3000);
+
       const [statsData, projectsData] = await Promise.all([
         getDashboardStats(profile.id, 'client'),
         getProjectsForClient(profile.id),
       ]);
 
+      clearTimeout(timeoutId);
       setStats({
         totalSpent: statsData.totalSpent || 0,
         activeProjects: statsData.activeProjects || 0,
