@@ -25,12 +25,12 @@ function AppContent() {
 
   console.log('App render - loading:', loading, 'user:', !!user, 'profile:', !!profile, 'forceLoaded:', forceLoaded);
 
-  // Force loading to false after 15 seconds as a safety measure
+  // Force loading to false after 5 seconds as a safety measure
   useEffect(() => {
     const timer = setTimeout(() => {
       console.log('Force setting loaded to true');
       setForceLoaded(true);
-    }, 15000);
+    }, 5000);
 
     return () => clearTimeout(timer);
   }, []);

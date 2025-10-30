@@ -82,7 +82,7 @@ export function Invoices() {
     const timeout = setTimeout(() => {
       console.log('Invoices page safety timeout reached, setting loading to false');
       setLoading(false);
-    }, 10000); // 10 seconds
+    }, 3000); // 3 seconds
 
     return () => {
       try {
