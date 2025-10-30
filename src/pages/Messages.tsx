@@ -1,14 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { getMessagesForUser, subscribeToMessagesForUser, getMessagesBetween, sendMessage as sendMessageApi } from "../lib/api";
-import { Card, CardBody, CardHeader } from "../components/ui/Card";
+import { getMessagesForUser, subscribeToMessagesForUser, getMessagesBetween, sendMessage as sendMessageApi, getProfile } from "../lib/api";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import {
   MessageSquare,
   Send,
   Search,
-  User,
   MoreVertical,
   Phone,
   Video,
@@ -16,6 +14,8 @@ import {
   Smile,
   Image,
   File,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 
 interface Conversation {
@@ -26,15 +26,20 @@ interface Conversation {
   last_message_time: string;
   unread_count: number;
   is_online: boolean;
+  participant_id: string;
 }
 
-interface Message {
+interface DisplayMessage {
   id: string;
   sender_id: string;
+  receiver_id?: string;
   content: string;
   created_at: string;
   is_read: boolean;
   message_type: "text" | "image" | "file";
+  file_url?: string;
+  file_name?: string;
+  file_type?: string;
 }
 
 export function Messages() {
@@ -43,11 +48,15 @@ export function Messages() {
   const [selectedConversation, setSelectedConversation] = useState<
     string | null
   >(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const messageChannelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!profile) {
@@ -68,11 +77,47 @@ export function Messages() {
     // subscribe to realtime messages
     const channel = subscribeToMessagesForUser(profile.id, (payload) => {
       console.log('Realtime message update:', payload);
-      loadConversations();
-      if (selectedConversation) {
-        loadMessages(selectedConversation);
+      const newMsg = payload.new;
+      
+      if (payload.eventType === 'INSERT' && newMsg) {
+        // Real-time message received
+        if (selectedConversation && 
+            (newMsg.sender_id === selectedConversation || newMsg.receiver_id === selectedConversation)) {
+          // Add to current conversation
+          setMessages((prev) => {
+            // Avoid duplicates
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, {
+              id: newMsg.id,
+              sender_id: newMsg.sender_id,
+              receiver_id: newMsg.receiver_id,
+              content: newMsg.content,
+              created_at: newMsg.created_at || new Date().toISOString(),
+              is_read: newMsg.is_read,
+              message_type: newMsg.file_url ? (newMsg.file_type?.startsWith('image/') ? 'image' : 'file') : 'text',
+              file_url: newMsg.file_url,
+              file_name: newMsg.file_name,
+              file_type: newMsg.file_type,
+            }];
+          });
+
+          // Mark as read if it's from the other user
+          if (newMsg.sender_id !== profile.id) {
+            setTimeout(() => markConversationAsRead(selectedConversation), 500);
+          }
+        }
+
+        // Update conversations list
+        loadConversations();
+
+        // Simulate typing indicator stop
+        if (newMsg.sender_id !== profile.id) {
+          setOtherUserTyping(false);
+        }
       }
     });
+
+    messageChannelRef.current = channel;
 
     // Safety timeout to prevent infinite loading
     const timeout = setTimeout(() => {
@@ -87,6 +132,9 @@ export function Messages() {
         console.log('Error unsubscribing from messages channel:', err);
       }
       clearTimeout(timeout);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
   }, [profile]);
 
@@ -108,27 +156,55 @@ export function Messages() {
 
       // Build conversation list by deduping counterpart user or project
       const map = new Map<string, Conversation>();
+      const profileCache = new Map<string, any>();
+
       for (const m of msgs) {
         // determine conversation id: prefer project_id, otherwise counterpart user id
-        const convId = m.project_id || (m.sender_id === profile.id ? m.receiver_id || '' : m.sender_id);
+        const participantId = m.sender_id === profile.id ? m.receiver_id || '' : m.sender_id;
+        const convId = m.project_id || participantId;
         if (!convId) continue;
+
         const existing = map.get(convId);
-        const participantName = convId; // placeholder; frontend can fetch profile for nicer name
         const last_message_time = m.created_at || new Date().toISOString();
         const last_message = m.content;
-        const unread_count = existing ? existing.unread_count : (m.is_read ? 0 : 1);
-        map.set(convId, {
-          id: convId,
-          participant_name: participantName,
-          participant_avatar: undefined,
-          last_message,
-          last_message_time,
-          unread_count,
-          is_online: false,
-        });
+        const unread_count = existing 
+          ? existing.unread_count + (m.is_read || m.sender_id === profile.id ? 0 : 1)
+          : (m.is_read || m.sender_id === profile.id ? 0 : 1);
+
+        // Try to fetch participant name
+        let participantName = participantId;
+        if (participantId && !profileCache.has(participantId)) {
+          try {
+            const participantProfile = await getProfile(participantId);
+            if (participantProfile) {
+              profileCache.set(participantId, participantProfile);
+              participantName = participantProfile.full_name || participantId;
+            }
+          } catch (err) {
+            console.error('Error fetching participant profile:', err);
+          }
+        } else if (profileCache.has(participantId)) {
+          const cached = profileCache.get(participantId);
+          participantName = cached.full_name || participantId;
+        }
+
+        if (!existing || new Date(last_message_time) > new Date(existing.last_message_time)) {
+          map.set(convId, {
+            id: convId,
+            participant_id: participantId,
+            participant_name: participantName,
+            participant_avatar: undefined,
+            last_message,
+            last_message_time,
+            unread_count,
+            is_online: Math.random() > 0.5, // Simulated online status - implement with presence
+          });
+        }
       }
 
-      setConversations(Array.from(map.values()));
+      setConversations(Array.from(map.values()).sort((a, b) => 
+        new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime()
+      ));
     } catch (error) {
       console.error("Error loading conversations:", error);
     } finally {
@@ -144,14 +220,31 @@ export function Messages() {
       setMessages(msgs.map((m) => ({
         id: m.id,
         sender_id: m.sender_id,
+        receiver_id: m.receiver_id,
         content: m.content,
         created_at: m.created_at || new Date().toISOString(),
         is_read: m.is_read,
-        message_type: 'text',
+        message_type: m.file_url ? (m.file_type?.startsWith('image/') ? 'image' : 'file') : 'text',
+        file_url: m.file_url,
+        file_name: m.file_name,
+        file_type: m.file_type,
       })));
+
+      // Mark messages as read
+      setTimeout(() => {
+        markConversationAsRead(conversationId);
+      }, 1000);
     } catch (err) {
       console.error('loadMessages error', err);
     }
+  };
+
+  const markConversationAsRead = (conversationId: string) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId ? { ...conv, unread_count: 0 } : conv
+      )
+    );
   };
 
   const handleSendMessage = async () => {
@@ -159,6 +252,26 @@ export function Messages() {
 
     const messageToSend = newMessage.trim();
     setNewMessage(""); // Clear input immediately for better UX
+    setIsTyping(false);
+
+    // Stop typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Create optimistic message
+    const optimisticMessage: DisplayMessage = {
+      id: `temp-${Date.now()}`,
+      sender_id: profile.id,
+      receiver_id: selectedConversation,
+      content: messageToSend,
+      created_at: new Date().toISOString(),
+      is_read: false,
+      message_type: 'text',
+    };
+
+    // Add optimistic message immediately
+    setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
       const msg = await sendMessageApi({
@@ -166,20 +279,25 @@ export function Messages() {
         receiver_id: selectedConversation,
         project_id: undefined,
         content: messageToSend,
+        is_read: false,
       });
 
       if (msg) {
-        // Add message to local state immediately for instant UI update
-        const newMessageObj = {
-          id: msg.id,
-          sender_id: msg.sender_id,
-          content: msg.content,
-          created_at: msg.created_at || new Date().toISOString(),
-          is_read: msg.is_read,
-          message_type: 'text' as const,
-        };
-
-        setMessages((prev) => [...prev, newMessageObj]);
+        // Replace optimistic message with real one
+        setMessages((prev) =>
+          prev.map((m) => (m.id === optimisticMessage.id ? {
+            id: msg.id,
+            sender_id: msg.sender_id,
+            receiver_id: msg.receiver_id,
+            content: msg.content,
+            created_at: msg.created_at || new Date().toISOString(),
+            is_read: msg.is_read,
+            message_type: msg.file_url ? (msg.file_type?.startsWith('image/') ? 'image' : 'file') : 'text',
+            file_url: msg.file_url,
+            file_name: msg.file_name,
+            file_type: msg.file_type,
+          } : m))
+        );
 
         // Update conversation list to show latest message
         setConversations((prev) =>
@@ -189,17 +307,40 @@ export function Messages() {
                   ...conv,
                   last_message: messageToSend,
                   last_message_time: new Date().toISOString(),
-                  unread_count: 0, // Since we're sending, no unread for us
                 }
               : conv
+          ).sort((a, b) => 
+            new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime()
           )
         );
       }
     } catch (err) {
       console.error('sendMessage error', err);
-      // Restore the message if sending failed
+      // Remove optimistic message and restore input
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
       setNewMessage(messageToSend);
-      // Could add a toast notification here
+    }
+  };
+
+  const handleTyping = (value: string) => {
+    setNewMessage(value);
+    
+    if (!isTyping && value.length > 0) {
+      setIsTyping(true);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout to stop typing indicator
+    if (value.length > 0) {
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 2000);
+    } else {
+      setIsTyping(false);
     }
   };
 
@@ -349,56 +490,120 @@ export function Messages() {
                   }`}
                 >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                    className={`max-w-xs lg:max-w-md ${
                       message.sender_id === profile?.id
                         ? "bg-purple-600 text-white"
                         : "bg-gray-100 text-gray-900"
-                    }`}
+                    } rounded-2xl overflow-hidden shadow-sm`}
                   >
-                    <p className="text-sm">{message.content}</p>
-                    <p
-                      className={`text-xs mt-1 ${
-                        message.sender_id === profile?.id
-                          ? "text-purple-200"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {new Date(message.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                    {message.message_type === 'image' && message.file_url ? (
+                      <div>
+                        <img 
+                          src={message.file_url} 
+                          alt={message.file_name || 'Image'} 
+                          className="w-full h-auto max-w-sm"
+                        />
+                        {message.content && (
+                          <p className="px-4 py-2 text-sm">{message.content}</p>
+                        )}
+                      </div>
+                    ) : message.message_type === 'file' && message.file_url ? (
+                      <div className="px-4 py-2">
+                        <a 
+                          href={message.file_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center space-x-2 hover:underline"
+                        >
+                          <File className="w-5 h-5" />
+                          <span className="text-sm">{message.file_name || 'File'}</span>
+                        </a>
+                        {message.content && (
+                          <p className="text-sm mt-2">{message.content}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="px-4 py-2 text-sm">{message.content}</p>
+                    )}
+                    <div className="flex items-center justify-between px-4 pb-2">
+                      <p
+                        className={`text-xs ${
+                          message.sender_id === profile?.id
+                            ? "text-purple-200"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {new Date(message.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                      {message.sender_id === profile?.id && (
+                        <div className="flex items-center">
+                          {message.is_read ? (
+                            <CheckCheck className="w-4 h-4 text-purple-200" />
+                          ) : (
+                            <Check className="w-4 h-4 text-purple-200" />
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
+              
+              {/* Typing Indicator */}
+              {otherUserTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 px-4 py-2 rounded-2xl">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input */}
             <div className="p-4 border-t border-gray-200">
+              {isTyping && (
+                <div className="text-xs text-gray-500 mb-2 px-2">
+                  Typing...
+                </div>
+              )}
               <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" title="Attach file">
                   <Paperclip className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" title="Attach image">
                   <Image className="w-4 h-4" />
                 </Button>
                 <div className="flex-1">
                   <Input
                     placeholder="Type a message..."
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                    onChange={(e) => handleTyping(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
                     className="rounded-full"
                   />
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" title="Add emoji">
                   <Smile className="w-4 h-4" />
                 </Button>
                 <Button
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim()}
-                  className="rounded-full"
+                  className="rounded-full bg-purple-600 hover:bg-purple-700 text-white"
+                  title="Send message"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
