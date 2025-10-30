@@ -95,6 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('loadProfile called for userId:', userId);
     try {
       console.log('Loading profile for user:', userId);
+      
+      // Get user metadata for fallback
+      const { data: { user } } = await supabase.auth.getUser();
+      const userMetadata = user?.user_metadata || {};
+      console.log('User metadata available:', userMetadata);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -105,17 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Error loading profile:', error);
-        // If there's an error (table doesn't exist, permissions, etc.), create a fallback profile
-        console.log('Using fallback profile due to error');
+        // If there's an error, create a fallback profile from user metadata
+        console.log('Using fallback profile with user metadata');
         const fallbackProfile = {
           id: userId,
-          full_name: 'User',
-          role: 'freelancer' as const,
-          availability_status: 'offline' as const,
+          full_name: userMetadata.full_name || 'User',
+          role: (userMetadata.role || 'freelancer') as 'freelancer' | 'client',
+          availability_status: 'online' as const,
         };
         console.log('Setting fallback profile:', fallbackProfile);
         setProfile(fallbackProfile);
-        console.log('Profile state should be set now');
         return;
       }
 
@@ -123,13 +128,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Profile loaded successfully:', data);
         setProfile(data);
       } else {
-        console.log('No profile found, attempting to create one');
-        // Try to create a basic profile if it doesn't exist
+        console.log('No profile found, attempting to create one from user metadata');
+        // Create profile from user metadata
         const defaultProfile = {
           id: userId,
-          full_name: 'User',
-          role: 'freelancer' as const,
-          availability_status: 'offline' as const,
+          full_name: userMetadata.full_name || 'User',
+          role: (userMetadata.role || 'freelancer') as 'freelancer' | 'client',
+          availability_status: 'online' as const,
         };
 
         const { error: insertError } = await supabase
@@ -150,15 +155,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Exception in loadProfile:', error);
-      // On any exception, use a fallback profile to prevent infinite loading
-      console.log('Using fallback profile due to exception');
+      // On any exception, use a fallback profile with user metadata
+      const { data: { user } } = await supabase.auth.getUser();
+      const userMetadata = user?.user_metadata || {};
       const fallbackProfile = {
         id: userId,
-        full_name: 'User',
-        role: 'freelancer' as const,
-        availability_status: 'offline' as const,
+        full_name: userMetadata.full_name || 'User',
+        role: (userMetadata.role || 'freelancer') as 'freelancer' | 'client',
+        availability_status: 'online' as const,
       };
-      console.log('Setting fallback profile due to exception:', fallbackProfile);
+      console.log('Setting fallback profile with metadata due to exception:', fallbackProfile);
       setProfile(fallbackProfile);
     } finally {
       console.log('Setting loading to false in loadProfile');
@@ -168,6 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, userData: { full_name: string; role: 'freelancer' | 'client' }) => {
     try {
+      console.log('Starting signup with data:', { email, full_name: userData.full_name, role: userData.role });
+      
       // Sign up without email confirmation
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -190,6 +198,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('Signup response:', authData);
 
+      // Create profile in database
+      if (authData.user) {
+        console.log('Creating profile for user:', authData.user.id);
+        const profileData = {
+          id: authData.user.id,
+          full_name: userData.full_name,
+          role: userData.role,
+          availability_status: 'online' as const,
+        };
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(profileData);
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+        } else {
+          console.log('Profile created successfully');
+        }
+      }
+
       // If user is created but not confirmed, try to sign them in immediately
       // This works if the project allows signin without email confirmation
       if (authData.user && !authData.session) {
@@ -206,30 +235,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (signInData.session) {
+          console.log('Auto sign-in successful, setting session');
           setSession(signInData.session);
           setUser(signInData.session.user);
           await loadProfile(signInData.session.user.id);
         }
       } else if (authData.session) {
         // User was auto-confirmed
+        console.log('User auto-confirmed, setting session');
         setSession(authData.session);
         setUser(authData.session.user);
         await loadProfile(authData.session.user.id);
-      }
-
-      if (authData.user) {
-        // Create profile immediately
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: authData.user.id,
-          full_name: userData.full_name,
-          role: userData.role,
-          availability_status: 'offline',
-        });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          // Don't fail signup if profile creation fails, just log it
-        }
       }
 
       return { error: null };
@@ -241,6 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('Starting sign in for email:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -251,16 +269,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
+      console.log('Sign in successful, data:', { session: !!data.session, user: !!data.user });
+
       // Update local state immediately if session exists
-      if (data.session) {
+      if (data.session && data.user) {
+        console.log('Setting session and user from sign in');
         setSession(data.session);
-        setUser(data.session.user);
-        await loadProfile(data.session.user.id);
+        setUser(data.user);
+        
+        // Load the profile with user metadata
+        console.log('User metadata:', data.user.user_metadata);
+        await loadProfile(data.user.id);
       }
 
       return { error: null };
     } catch (err) {
-      console.error('signIn error:', err);
+      console.error('signIn exception:', err);
       return { error: err as AuthError };
     }
   };

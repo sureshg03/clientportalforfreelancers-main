@@ -106,7 +106,7 @@ export async function sendMessage(payload: Partial<Message>) {
 
 export async function getFreelancers(limit = 50) {
   const { data, error } = await supabase
-    .from<Profile>('profiles')
+    .from('profiles')
     .select('*')
     .eq('role', 'freelancer')
     .limit(limit);
@@ -119,7 +119,7 @@ export async function getFreelancers(limit = 50) {
 
 export async function getProposalsForProject(projectId: string) {
   const { data, error } = await supabase
-    .from<Proposal>('proposals')
+    .from('proposals')
     .select('*')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false });

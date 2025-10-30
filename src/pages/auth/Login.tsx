@@ -36,7 +36,7 @@ export function Login() {
 
   const cardVariants = {
     hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] } },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.7 } },
   };
 
   const inputVariants = {
@@ -115,6 +115,7 @@ export function Login() {
               <motion.div
                 variants={inputVariants}
                 whileFocus="focus"
+                className="relative"
               >
                 <Input
                   label="Email Address"
@@ -122,14 +123,18 @@ export function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  icon={<Mail className="w-4 h-4 text-purple-400" />}
                   required
-                  className="focus:ring-2 focus:ring-purple-500/50 border-purple-300 focus:border-purple-500 transition-all duration-200 shadow-sm hover:shadow-md"
+                  className="pr-10 focus:ring-2 focus:ring-purple-500/50 border-purple-300 focus:border-purple-500 transition-all duration-200 shadow-sm hover:shadow-md"
                 />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <Mail className="w-4 h-4 text-gray-400" />
+                </div>
               </motion.div>
+
               <motion.div
                 variants={inputVariants}
                 whileFocus="focus"
+                className="relative"
               >
                 <Input
                   label="Password"
@@ -137,22 +142,21 @@ export function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your secure password"
-                  icon={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="p-1 hover:bg-purple-100 rounded transition-colors"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4 text-purple-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-purple-400" />
-                      )}
-                    </button>
-                  }
                   required
                   className="focus:ring-2 focus:ring-purple-500/50 border-purple-300 focus:border-purple-500 transition-all duration-200 pr-10 shadow-sm hover:shadow-md"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-purple-100 rounded transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4 text-purple-400" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-purple-400" />
+                  )}
+                </button>
               </motion.div>
               <motion.div
                 whileHover={{ scale: 1.02 }}

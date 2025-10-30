@@ -266,6 +266,104 @@ const dummyReviews = [
   },
 ];
 
+// Dummy messages for testing
+const dummyMessages = [
+  {
+    id: '880e8400-e29b-41d4-a716-446655440001',
+    sender_id: '550e8400-e29b-41d4-a716-446655440009', // Rajesh Kumar (client)
+    receiver_id: '550e8400-e29b-41d4-a716-446655440001', // Arun Kumar (freelancer)
+    content: 'Hi Arun, I reviewed your portfolio and I am impressed! Are you available for the e-commerce project?',
+    is_read: true,
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+  },
+  {
+    id: '880e8400-e29b-41d4-a716-446655440002',
+    sender_id: '550e8400-e29b-41d4-a716-446655440001', // Arun Kumar
+    receiver_id: '550e8400-e29b-41d4-a716-446655440009', // Rajesh Kumar
+    content: 'Hello Rajesh! Thank you for reaching out. Yes, I am very interested. Can we discuss the project requirements?',
+    is_read: true,
+    created_at: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '880e8400-e29b-41d4-a716-446655440003',
+    sender_id: '550e8400-e29b-41d4-a716-446655440010', // Meera Srinivasan (client)
+    receiver_id: '550e8400-e29b-41d4-a716-446655440004', // Deepika Venkatesh (designer)
+    content: 'Deepika, your design work is amazing! We need a complete brand identity. Are you available next week?',
+    is_read: false,
+    created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 mins ago
+  },
+  {
+    id: '880e8400-e29b-41d4-a716-446655440004',
+    sender_id: '550e8400-e29b-41d4-a716-446655440009', // Rajesh Kumar
+    receiver_id: '550e8400-e29b-41d4-a716-446655440003', // Karthik Rajan
+    content: 'Hey Karthik, I need a mobile app developer for our restaurant ordering system. Interested?',
+    is_read: true,
+    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '880e8400-e29b-41d4-a716-446655440005',
+    sender_id: '550e8400-e29b-41d4-a716-446655440003', // Karthik Rajan
+    receiver_id: '550e8400-e29b-41d4-a716-446655440009', // Rajesh Kumar
+    content: 'Absolutely! I have experience with similar projects. Let me know when we can have a call.',
+    is_read: true,
+    created_at: new Date(Date.now() - 4.5 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+// Dummy notifications
+const dummyNotifications = [
+  {
+    id: '990e8400-e29b-41d4-a716-446655440001',
+    user_id: '550e8400-e29b-41d4-a716-446655440001', // Arun Kumar
+    title: 'New Message from Rajesh Kumar',
+    message: 'You have a new message about the e-commerce project',
+    type: 'info',
+    link: '/messages',
+    is_read: false,
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '990e8400-e29b-41d4-a716-446655440002',
+    user_id: '550e8400-e29b-41d4-a716-446655440001',
+    title: 'Project Milestone Completed',
+    message: 'Congratulations! You completed milestone 1 of the e-commerce project',
+    type: 'success',
+    link: '/projects',
+    is_read: false,
+    created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '990e8400-e29b-41d4-a716-446655440003',
+    user_id: '550e8400-e29b-41d4-a716-446655440004', // Deepika
+    title: 'New Message from Meera Srinivasan',
+    message: 'Meera is interested in hiring you for a brand identity project',
+    type: 'info',
+    link: '/messages',
+    is_read: false,
+    created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '990e8400-e29b-41d4-a716-446655440004',
+    user_id: '550e8400-e29b-41d4-a716-446655440009', // Rajesh (client)
+    title: 'New Proposal Received',
+    message: 'Arun Kumar submitted a proposal for your e-commerce project',
+    type: 'success',
+    link: '/projects',
+    is_read: true,
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '990e8400-e29b-41d4-a716-446655440005',
+    user_id: '550e8400-e29b-41d4-a716-446655440003', // Karthik
+    title: 'Payment Received',
+    message: 'You received $2,500 for the mobile app project',
+    type: 'success',
+    link: '/invoices',
+    is_read: false,
+    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
 // Function to populate dummy data
 export async function populateDummyData() {
   try {
@@ -334,6 +432,28 @@ export async function populateDummyData() {
       }
     }
 
+    // Insert messages
+    console.log('Inserting messages...');
+    for (const message of dummyMessages) {
+      const { error } = await supabase.from('messages').upsert(message);
+      if (error) {
+        console.error('Error inserting message:', message.id, error);
+      } else {
+        console.log('✓ Inserted message');
+      }
+    }
+
+    // Insert notifications
+    console.log('Inserting notifications...');
+    for (const notification of dummyNotifications) {
+      const { error } = await supabase.from('notifications').upsert(notification);
+      if (error) {
+        console.error('Error inserting notification:', notification.id, error);
+      } else {
+        console.log('✓ Inserted notification');
+      }
+    }
+
     console.log('✅ Dummy data population completed!');
   } catch (error) {
     console.error('❌ Error populating dummy data:', error);
@@ -346,6 +466,8 @@ export async function clearDummyData() {
     console.log('Clearing dummy data...');
 
     // Clear in reverse order to avoid foreign key constraints
+    await supabase.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('reviews').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('project_members').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('projects').delete().neq('id', '00000000-0000-0000-0000-000000000000');

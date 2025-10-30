@@ -66,8 +66,8 @@ export function BrowseFreelancers() {
       const data = await getFreelancers(100); // Get up to 100 freelancers
       
       clearTimeout(timeoutId);
-      setFreelancers(data);
-      setFilteredFreelancers(data);
+      setFreelancers(data as Freelancer[]);
+      setFilteredFreelancers(data as Freelancer[]);
     } catch (error) {
       console.error("Error loading freelancers:", error);
     } finally {
@@ -286,12 +286,12 @@ export function BrowseFreelancers() {
                       <p className="text-sm font-medium text-gray-900 mb-2">Skills</p>
                       <div className="flex flex-wrap gap-1">
                         {freelancer.skills.slice(0, 4).map((skill, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
+                          <Badge key={index} variant="default" className="text-xs">
                             {skill}
                           </Badge>
                         ))}
                         {freelancer.skills.length > 4 && (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="default" className="text-xs">
                             +{freelancer.skills.length - 4} more
                           </Badge>
                         )}
