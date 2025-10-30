@@ -78,12 +78,19 @@ export function Invoices() {
       loadInvoices();
     });
 
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('Invoices page safety timeout reached, setting loading to false');
+      setLoading(false);
+    }, 10000); // 10 seconds
+
     return () => {
       try {
         channel.unsubscribe();
       } catch (err) {
         // ignore
       }
+      clearTimeout(timeout);
     };
   }, [profile]);
 

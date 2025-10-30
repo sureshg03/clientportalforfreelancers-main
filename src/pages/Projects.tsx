@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { getProjects, subscribeToProjects, createProject, updateProject } from "../lib/api";
+import { getProjects, getProjectsForClient, getProjectsForFreelancer, subscribeToProjects, createProject, updateProject } from "../lib/api";
 import { Card, CardBody, CardHeader } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -89,12 +89,19 @@ export function Projects() {
       loadProjects();
     });
 
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('Projects page safety timeout reached, setting loading to false');
+      setLoading(false);
+    }, 10000); // 10 seconds
+
     return () => {
       try {
         channel.unsubscribe();
       } catch (err) {
         // ignore
       }
+      clearTimeout(timeout);
     };
   }, [profile]);
 
@@ -102,7 +109,18 @@ export function Projects() {
     if (!profile) return;
 
     try {
-      const data = await getProjects({ search: searchTerm, status: statusFilter });
+      let data: any[] = [];
+      
+      // Use role-specific functions to get only relevant projects
+      if (profile.role === 'client') {
+        data = await getProjectsForClient(profile.id);
+      } else if (profile.role === 'freelancer') {
+        data = await getProjectsForFreelancer(profile.id);
+      } else {
+        // Fallback to generic function if role is unknown
+        data = await getProjects({ search: searchTerm, status: statusFilter });
+      }
+      
       // Map DB rows into local shape (adding simple derived fields)
       const mapped = data.map((p) => ({
         id: p.id,
